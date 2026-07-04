@@ -798,56 +798,82 @@ class MockProvider(BaseProvider):
                 break
 
         if tools and tool_choice != "none":
+            lower_user = last_user.lower()
+            keyword_map = {
+                "add": ["add", "plus", "sum", "+"],
+                "subtract": ["subtract", "minus", "difference", "-"],
+                "multiply": ["multiply", "times", "product", "*", "×"],
+                "divide": ["divide", "divided", "quotient", "/", "÷"],
+                "power": ["power", "raised", "exponent", "**", "^"],
+                "sqrt": ["sqrt", "square root", "root"],
+                "save_note": ["save", "write", "store", "note"],
+                "read_note": ["read", "get", "fetch", "note"],
+                "list_notes": ["list", "all notes", "show notes"],
+                "delete_note": ["delete", "remove", "erase"],
+                "get_current_time": ["time", "clock", "now", "date"],
+                "string_length": ["length", "strlen", "count char"],
+                "convert_temperature": ["temperature", "celsius", "fahrenheit", "convert temp"],
+            }
+            matched_tool = None
             for t in tools:
                 d = t if isinstance(t, dict) else t.model_dump()
-                tool_name = d["name"]
-                schema = d.get("input_schema") or {}
-                props = schema.get("properties", {})
-                args = {}
-                nums = re.findall(r'\b(\d+(?:\.\d+)?)\b', last_user)
-                num_idx = 0
-                for k, v in props.items():
-                    if v.get("type") == "number":
-                        if num_idx < len(nums):
-                            val = nums[num_idx]
-                            args[k] = float(val) if '.' in val else int(val)
-                            num_idx += 1
-                        else:
-                            args[k] = 0
-                    elif v.get("type") == "string":
-                        args[k] = "mock_value"
-                    elif v.get("type") == "boolean":
-                        args[k] = True
-                if any(msg.get("role") == "tool" for msg in messages):
-                    tool_result = ""
-                    for msg in messages:
-                        if msg.get("role") == "tool":
-                            tool_result = msg.get("content", "")
-                    try:
-                        result_data = json.loads(tool_result) if isinstance(tool_result, str) else tool_result
-                        text = f"The result is {result_data.get('result', tool_result)}."
-                    except Exception:
-                        text = f"The result is {tool_result}."
-                    return {
-                        "text": text, "tool_calls": [],
-                        "input_tokens": len(last_user) // 4,
-                        "output_tokens": len(text) // 4,
-                        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
-                        "stop_reason": "end_turn", "model": m,
-                        "tool_call_dialect": "native", "reasoning_applied": False,
-                    }
+                tname = d["name"]
+                keywords = keyword_map.get(tname, [tname])
+                if any(kw in lower_user for kw in keywords):
+                    matched_tool = d
+                    break
+            if matched_tool is None:
+                matched_tool = (tools[0] if isinstance(tools[0], dict)
+                                else tools[0].model_dump())
+            tool_name = matched_tool["name"]
+            schema = matched_tool.get("input_schema") or {}
+            props = schema.get("properties", {})
+            args = {}
+            nums = re.findall(r'\b(\d+(?:\.\d+)?)\b', last_user)
+            num_idx = 0
+            for k, v in props.items():
+                if v.get("type") == "number":
+                    if num_idx < len(nums):
+                        val = nums[num_idx]
+                        args[k] = float(val) if '.' in val else int(val)
+                        num_idx += 1
+                    else:
+                        args[k] = 0
+                elif v.get("type") == "string":
+                    words = last_user.split()
+                    args[k] = " ".join(w for w in words if not w.replace('.','').isdigit()) or "mock_value"
+                elif v.get("type") == "boolean":
+                    args[k] = True
+            if any(msg.get("role") == "tool" for msg in messages):
+                tool_result = ""
+                for msg in messages:
+                    if msg.get("role") == "tool":
+                        tool_result = msg.get("content", "")
+                try:
+                    result_data = json.loads(tool_result) if isinstance(tool_result, str) else tool_result
+                    text = f"The result is {result_data.get('result', tool_result)}."
+                except Exception:
+                    text = f"The result is {tool_result}."
                 return {
-                    "text": "",
-                    "tool_calls": [{
-                        "id": f"call_{uuid.uuid4().hex[:8]}",
-                        "name": tool_name,
-                        "arguments": args,
-                    }],
+                    "text": text, "tool_calls": [],
                     "input_tokens": len(last_user) // 4,
-                    "output_tokens": 20,
+                    "output_tokens": len(text) // 4,
                     "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
-                    "stop_reason": "tool_use", "model": m,
+                    "stop_reason": "end_turn", "model": m,
                     "tool_call_dialect": "native", "reasoning_applied": False,
+                }
+            return {
+                "text": "",
+                "tool_calls": [{
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "name": tool_name,
+                    "arguments": args,
+                }],
+                "input_tokens": len(last_user) // 4,
+                "output_tokens": 20,
+                "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+                "stop_reason": "tool_use", "model": m,
+                "tool_call_dialect": "native", "reasoning_applied": False,
                 }
 
         if response_format:
@@ -923,6 +949,5 @@ def build_providers(cache_store):
         out["github"] = GitHubProvider(k, os.getenv("GITHUB_MODEL", "openai/gpt-4.1-mini"))
     if om := os.getenv("OLLAMA_MODEL"):
         out["ollama"] = OllamaProvider(om, os.getenv("OLLAMA_URL", "http://localhost:11434"))
-    if not out:
-        out["mock"] = MockProvider()
+    out["mock"] = MockProvider()
     return out

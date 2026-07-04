@@ -1,274 +1,256 @@
 # LLM Gateway V2
 
-Same 7-provider gateway as `llm_gateway/` (Ollama, Gemini, NVIDIA NIM, Groq, Cerebras, OpenRouter, GitHub Models), upgraded to the **2026 agent shape** taught in Session 5: native tool-use, prompt caching, reasoning budgets, structured output, capability-aware routing.
+A multi-provider LLM gateway with **auto-failover**, **rate limiting**, **MCP agent tools**, **prompt caching**, **tool calling**, **structured output**, and a built-in **mock provider** for zero-config development.
 
-V1 stays as-is on port **8099**. V2 runs on port **8100** so both coexist.
-
-> Pydantic v2 on every boundary. Old request bodies still work — every new feature is opt-in via new fields.
+**Works out of the box** — no API keys required. The mock provider lets you test the full agent + MCP tool pipeline immediately.
 
 ---
 
-## What's new vs V1
+## Features
 
-| Feature | V1 | V2 |
-|---|---|---|
-| Tool-use | Pass JSON-by-prompt, regex the response | **Native tool-use** translated per provider; canonical `tool_calls[]` returned |
-| Prompt caching | none | **Gemini explicit cache** (SHA-256 keyed) + `cache_*_input_tokens` surfacing for OpenAI-compat (implicit prefix) |
-| Reasoning | none | **`reasoning="off"\|"low"\|"medium"\|"high"`** mapped to provider knob (Gemini `thinking_level`, OpenAI-compat `reasoning_effort`, etc.) |
-| Structured output | "ask the model nicely" | **`response_format={type:"json_schema",schema:{}}`** + server-side schema validation + 1 corrective retry |
-| Routing | RPM/RPD/cooldowns | RPM/RPD/cooldowns **+ capability skip**: routing skips providers that lack a requested capability and reports it |
-| Endpoints | `/v1/chat`, `/v1/providers`, `/v1/status`, `/v1/calls`, `/`, `/help` | all of the above **+ `/v1/capabilities`** |
-| Wait-on-cooldown | 503s on cooldown | When an explicit `provider` is given, the handler waits up to 30s for cooldown rather than 503-ing |
-| Dashboard | RPM/RPD bars | RPM/RPD bars **+ capability badges + cache reads/writes + tool-call dialect** |
-| SQLite log | tokens, latency | tokens, latency **+ cache_read_tokens, cache_create_tokens, tool_calls, tool_dialect, reasoning_applied** |
+- **7 LLM providers** — Ollama, Gemini, NVIDIA NIM, Groq, Cerebras, OpenRouter, GitHub Models
+- **Mock provider** — built-in simulated LLM for testing without API keys
+- **MCP agent endpoint** — agentic loop that connects to an MCP tool server (calculator, notes, time, temperature)
+- **Auto-failover** — if one provider is rate-limited or down, the gateway automatically tries the next
+- **Rate limiting** — RPM/RPD/TPM tracking with cooldowns per provider
+- **Capability-aware routing** — skips providers that lack required features (tools, caching, reasoning)
+- **Prompt caching** — Gemini explicit cache + implicit prefix caching for OpenAI-compatible providers
+- **Tool calling** — native tool-use translated per provider, canonical `tool_calls[]` response
+- **Structured output** — JSON schema validation with corrective retry
+- **Reasoning budgets** — `reasoning="off"|"low"|"medium"|"high"` mapped per provider
+- **Web dashboard** — real-time monitoring, interactive testing, and MCP tool explorer
 
 ---
 
-## Quick start
+## Quick Start (No API Keys Needed)
 
 ```bash
+# 1. Clone the repo
+git clone https://github.com/ganeshkumar-chandrasekaran/llm_gatewayV2.git
 cd llm_gatewayV2
-./run.sh                            # creates .venv, starts on port 8100
-# in another shell:
-curl -s http://localhost:8100/v1/capabilities | python3 -m json.tool
+
+# 2. Run it
+./run.sh                  # creates .venv, installs deps, starts on port 8100
+
+# 3. Open the dashboard
+open http://localhost:8100/static/dashboard.html
 ```
 
-Reads `../.env` (parent directory) for keys — same as V1.
+That's it! The **mock provider** is enabled by default. In the dashboard:
 
-`GATEWAY_V2_PORT=8100` (override with env). `LLM_ORDER` is shared with V1.
+1. Select **mock** from the provider dropdown
+2. Make sure **Agent + MCP Tools** is checked
+3. Click any sample prompt or type your own
+4. Hit **Send** and see the tool trace
 
----
+### Try These Prompts (Mock + MCP)
 
-## Request shape
+| Prompt | Tool Used | Result |
+|--------|-----------|--------|
+| `add 7 plus 5` | add(a=7, b=5) | 12.0 |
+| `multiply 12 times 8` | multiply(a=12, b=8) | 96.0 |
+| `divide 100 by 4` | divide(a=100, b=4) | 25.0 |
+| `subtract 50 minus 18` | subtract(a=50, b=18) | 32.0 |
+| `what is the square root of 144` | sqrt(number=144) | 12.0 |
+| `3 raised to the power of 4` | power(base=3, exponent=4) | 81.0 |
+| `what time is it now` | get_current_time() | current date/time |
+| `convert 100 celsius to fahrenheit` | convert_temperature(100, C, F) | 212.0 |
 
-All V1 fields still work. New optional fields:
-
-```jsonc
-{
-  "messages": [...],
-  "system": [{"text": "...", "cache": true}, {"text": "...per-turn..."}],   // OR plain string
-  "cache_system": true,                                                     // shorthand: cache the whole system block
-  "tools": [
-    {"name":"add","description":"a+b",
-     "input_schema":{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}},"required":["a","b"]}}
-  ],
-  "tool_choice": "auto",
-  "reasoning": "high",
-  "response_format": {"type":"json_schema","schema":{...},"name":"out","strict":true}
-}
-```
-
-To send a tool result back, use a new `tool` role:
-
-```jsonc
-{"role":"tool","tool_call_id":"<id from tool_calls[0].id>","tool_name":"add","content":"{\"result\":12}"}
-```
-
-(`tool_name` is required for Gemini's `function_response`; OpenAI-compat ignores it.)
-
-## Response shape
-
-```jsonc
-{
-  "provider": "gemini",
-  "model": "gemini-3.1-flash-lite-preview",
-  "text": "",
-  "tool_calls": [
-    {"id":"call_4bf8ecc7","name":"add","arguments":{"a":7,"b":5},
-     "provider_meta":{"thoughtSignature":"..."}}      // opaque meta — echo back unchanged in next turn
-  ],
-  "stop_reason": "tool_use",
-  "input_tokens": 66, "output_tokens": 16,
-  "cache_creation_input_tokens": 0,
-  "cache_read_input_tokens": 0,
-  "latency_ms": 412,
-  "tool_call_dialect": "native",       // or "prompted_fallback" (Ollama on non-tool models) or "none"
-  "reasoning_applied": false,
-  "parsed": null,                      // populated when response_format is used and validation passes
-  "attempted": []                      // failed providers + skip reasons
-}
-```
-
-`provider_meta` carries provider-specific opaque state that must be sent back unchanged on the assistant turn. Today it carries Gemini's `thoughtSignature` (required by `gemini-3.x` models on the second turn or you get HTTP 400). Treat it as a black box.
-
----
-
-## `/v1/capabilities`
-
-Per-provider, per-current-model capability matrix. Routing reads this when failing over.
+### Using cURL
 
 ```bash
-curl -s http://localhost:8100/v1/capabilities | python3 -m json.tool
-```
+# Agent mode (with MCP tools)
+curl -X POST http://localhost:8100/v1/agent \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "multiply 4 times 2", "provider": "mock"}'
 
-```jsonc
-{
-  "gemini":   {"tools":true,"caching":true,"reasoning":false,"structured":true,"parallel_tools":true,"model":"gemini-3.1-flash-lite-preview","max_ctx":1000000,"rpm":15,"rpd":1000},
-  "groq":     {"tools":true,"caching":true,"reasoning":false,"structured":true,"parallel_tools":true,"model":"llama-3.3-70b-versatile","max_ctx":100000,"rpm":30,"rpd":1000},
-  "ollama":   {"tools":true,"caching":false,"reasoning":false,"structured":true,"parallel_tools":false,"model":"gemma4:31b","max_ctx":32000,"rpm":9999,"rpd":9999999}
-  // ... 4 more
-}
+# Chat mode (plain LLM, no tools)
+curl -X POST http://localhost:8100/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Say hello", "provider": "mock"}'
 ```
-
-`reasoning=true` only when the **current** model supports it (e.g. Gemini 2.5/3 non-lite; OpenAI-compat reasoning models — DeepSeek-R, gpt-oss, qwen3, o1/o3, etc.). For other models the request returns with `reasoning_applied: false` and a 200 — the gateway logs the no-op rather than failing.
 
 ---
 
-## Capability-aware routing
+## Connecting a Real LLM Provider
 
-When a request needs a capability the chosen provider lacks, V2 skips it during failover and tags the attempt:
+The mock provider is great for testing, but you'll want a real LLM for actual use. The gateway supports 7 providers — here's how to set up the most popular free ones.
 
-```jsonc
-"attempted": [
-  {"provider":"github","reason":"skipped:no_reasoning"},
-  {"provider":"groq","reason":"cooldown (1.7s)"}
-]
-```
+### Step 1: Create the `.env` File
 
-When you set `provider="..."` explicitly and that provider lacks the capability, the gateway still tries (so you can experiment) — capabilities only gate **failover**, not direct calls.
-
----
-
-## End-to-end example: tools + caching + reasoning, against Gemini
+Copy the example file to the **parent directory** (one level above `llm_gatewayV2/`):
 
 ```bash
-curl -s -X POST http://localhost:8100/v1/chat \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "provider":"g",
-    "system":[{"text":"You are a careful math assistant. Always pick a tool when one fits.","cache":true}],
-    "messages":[{"role":"user","content":"What is 7 plus 5? Use the add tool."}],
-    "tools":[{"name":"add","description":"Return a + b.","input_schema":{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}},"required":["a","b"]}}],
-    "tool_choice":"auto",
-    "reasoning":"medium",
-    "max_tokens":2048
-  }' | python3 -m json.tool
+cp .env.example ../.env
 ```
 
-(On `gemini-3.1-flash-lite-preview` reasoning is silently ignored — the response will show `reasoning_applied: false`. Switch to `gemini-2.5-pro` or `gemini-3-pro` and it kicks in.)
+### Step 2: Get Your API Key
 
----
+#### Google Gemini (Recommended — generous free tier)
 
-## Python client
+1. Go to [aistudio.google.com](https://aistudio.google.com/)
+2. Click **Get API Key** → **Create API Key**
+3. Copy the key (starts with `AIza...`)
+4. Add to your `../.env`:
 
-```python
-from client import LLM
-llm = LLM()  # http://localhost:8100
-
-# Tool use
-result = llm.chat(
-    messages=[{"role":"user","content":"What is 7+5? use add."}],
-    provider="gr",
-    tools=[{"name":"add","description":"a+b",
-            "input_schema":{"type":"object","properties":{"a":{"type":"number"},"b":{"type":"number"}},"required":["a","b"]}}],
-    tool_choice="auto",
-)
-tc = result["tool_calls"][0]
-# … run the tool locally, call back with role="tool"
-
-# Structured output
-plan = llm.chat(
-    prompt="Plan a 2-step trip from Bangalore to Tokyo as JSON.",
-    provider="g",
-    response_format={"type":"json_schema","schema":{...},"name":"plan","strict":True},
-)
-print(plan["parsed"])           # validated dict, or None on validation failure (then 503)
-
-# Cached system + reasoning
-out = llm.chat(
-    prompt="Solve: ...",
-    provider="g",
-    system="<long stable preamble>",
-    cache_system=True,
-    reasoning="high",
-)
-print(out["cache_creation_input_tokens"], out["cache_read_input_tokens"], out["reasoning_applied"])
-
-# All V1 calls still work unchanged
-print(llm.chat("hello", provider="o")["text"])
+```env
+GEMINI_API_KEY=AIzaSy...your_key_here
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
----
+#### GitHub Models (Free with GitHub account)
 
-## Per-provider notes (free tier behaviour, May 2026)
+1. Go to [github.com/marketplace/models](https://github.com/marketplace/models)
+2. Pick any model → click **Use this model** to accept terms
+3. Create a Personal Access Token at [github.com/settings/tokens](https://github.com/settings/tokens)
+   - Click **Generate new token (classic)**
+   - No special scopes needed — just the default
+4. Add to your `../.env`:
 
-| Provider | Tools | Caching | Reasoning | Structured | Notes |
-|---|---|---|---|---|---|
-| **ollama** | native (llama3.x/qwen2.5+/mistral-nemo) or **prompted_fallback** | n/a (local) | n/a | json schema via `format=` | thinking models like `gemma4:31b` need `max_tokens ≥ 1024` to emit visible text |
-| **gemini** | native (`function_declarations`) | **explicit cache** above 1024 tokens — but free tier on `*-flash-lite-preview` is **disabled by Google** (returns 429 RESOURCE_EXHAUSTED with `limit=0`); switch to a paid model to exercise it | `thinking_level` on 2.5/3 non-lite | `responseMimeType` + `responseSchema` (auto-cleans `additionalProperties`/`$schema` etc.) | requires `thoughtSignature` echo back when re-sending function_call — V2 captures it into `provider_meta` and threads it through |
-| **nvidia** | native (OpenAI-compat) | implicit prefix (server-side); `cache_read_input_tokens` surfaces if the upstream returns `prompt_tokens_details.cached_tokens` | passed via `reasoning_effort` for DeepSeek-R / gpt-oss — silent no-op for v3.2 | json_schema strict, falls back to json_object | `deepseek-v4-pro` is slow (15-25s typical), bump request timeout |
-| **groq** | native | implicit | `reasoning_effort` on gpt-oss / qwen3 / deepseek-r1 — no-op on llama-3.3 | json_schema | tightest cooldown (2s) of the OpenAI-compat group |
-| **cerebras** | native | implicit | `reasoning_effort` on qwen3-think | json_schema | free-tier RPM is genuinely 30; will 429 under burst — V2 retries via failover |
-| **openrouter** | native | implicit | `reasoning_effort` if model supports it | json_schema | `:free` tier has 50 RPD pool shared across :free models; quality of `nvidia/nemotron-3-super:free` for structured output is iffy |
-| **github** | native | implicit | `reasoning_effort` on o1/o3/o4/gpt-5 family | json_schema strict | hard 8K input / 4K output cap |
+```env
+GITHUB_ACCESS_TOKEN=github_pat_...your_token_here
+GITHUB_MODEL=openai/gpt-4.1-mini
+```
 
-**Reasoning** — when a knob is unsupported on the current model, V2 logs it and returns `reasoning_applied: false` with a 200. It does **not** fail — that would be too aggressive for routing.
+#### Other Providers
 
-**Caching** — for OpenAI-compat providers the gateway just keeps the system prefix byte-stable across calls; the upstream's implicit prefix cache does the real work. The `cache_read_input_tokens` field surfaces only if the provider returns `usage.prompt_tokens_details.cached_tokens` (Groq does sometimes; the others rarely on free tier). For Gemini you have to explicitly cache, and free-tier `flash-lite` doesn't allow it. For Ollama there is no upstream — local generation is already fast.
+| Provider | Get Key At | Env Variable | Default Model |
+|----------|-----------|--------------|---------------|
+| Groq | [console.groq.com/keys](https://console.groq.com/keys) | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com) | `NVIDIA_API_KEY` | `deepseek-ai/deepseek-v3.2` |
+| Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | `CEREBRAS_API_KEY` | `qwen-3-235b-a22b-instruct-2507` |
+| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | `OPEN_ROUTER_API_KEY` | `nvidia/nemotron-3-super-120b-a12b:free` |
+| Ollama | [ollama.ai](https://ollama.ai) (local) | `OLLAMA_MODEL` | (your installed model) |
 
----
-
-## Test matrix
+### Step 3: Restart the Gateway
 
 ```bash
-./.venv/bin/python tests/test_all_providers.py
+# Stop the running server (Ctrl+C), then:
+./run.sh
 ```
 
-Runs five tests (basic, tools, structured, cache, reasoning) against each provider individually and prints a matrix. `n/a` is an honest answer when the provider/free-tier doesn't support the feature; `SKIP` is for cases that genuinely don't apply (Ollama for caching).
-
-Exit code is non-zero if any provider's `basic` test fails.
-
-A real run (May 2026, free-tier keys, all 7 providers in parallel):
-
-```
-provider    basic    tools     struct    cache    reasoning
------------------------------------------------------------
-ollama      OK       OK        OK        SKIP     n/a
-gemini      OK       OK        OK        n/a*     n/a*
-nvidia      OK       OK        OK        n/a      n/a
-groq        OK       OK        OK        FAIL‡    n/a
-cerebras    FAIL§    FAIL§     FAIL§     FAIL     FAIL
-openrouter  OK       OK        OK        n/a      n/a
-github      OK       OK        OK        n/a      n/a
-```
-
-**6/7 providers green on basic + tools + structured-output.**
-
-- **(*) Gemini cache n/a** — free tier returns `limit=0` for `gemini-3.1-flash-lite-preview`. The cache module mints and reuses correctly on paid-tier or larger models; on free-tier flash-lite it silently falls back to no-cache. `gemini-3.1-flash-lite` is also a non-thinking model so the reasoning knob is correctly a no-op.
-- **NVIDIA** — `deepseek-v4-pro` is slow on free tier (15-25s typical, occasionally up to 2 min) but stable; passes basic + tools + struct.
-- **(‡) Groq cache FAIL** — second call hit the 2s cooldown during parallel test; not a real failure of caching, just a test-pacing artefact. `prompt_tokens_details.cached_tokens` is rarely populated by Groq on free tier anyway.
-- **(§) Cerebras** — free-tier RPM (30) was burned during parallel test. Serial calls succeed.
-- **GitHub cache** — `cr2=2560` cached tokens read on second call (verified earlier; intermittent across runs depending on whether `prompt_tokens_details.cached_tokens` is populated). Implicit prefix caching is working server-side.
-- **Ollama tools** — `gemma4:31b` (the configured default) doesn't speak native tool-use, so the gateway falls back to **prompted_fallback** and parses `{"tool_call":{...}}` JSON out of the prose. **Native dialect verified** with `model="llama3.2:latest"` (and any `llama3.x` / `qwen2.5+` / `mistral-nemo` / `firefunction`) — set `model=` and the response carries `tool_call_dialect: "native"`. `phi4:latest` also returns a parsed tool call via prompted_fallback. `smollm2:135m` is too small (135M params) to follow either protocol.
-- **Reasoning n/a on the default models** — none of the *current default* free-tier models is a reasoning model. **Verified working** on three providers:
-  - **GitHub** — `model="deepseek/DeepSeek-R1"` + `reasoning="medium"` → `reasoning_applied: true`, visible `<think>...</think>` block, 5.2s latency.
-  - **Groq** — `model="openai/gpt-oss-120b"` (or `gpt-oss-20b`) + `reasoning="medium"` → `reasoning_applied: true`, sub-second latency.
-  - **Gemini** — `model="gemini-2.5-flash"` (uses `thinkingBudget` integer knob) or `model="gemini-2.5-pro"` / `gemini-3-pro` (uses `thinkingLevel` enum) → `reasoning_applied: true`. The gateway picks the right knob per model — see `_gemini_thinking_knob()`. **Note**: `qwen3-32b` on Groq emits `<think>` blocks but doesn't accept `reasoning_effort`; the gateway honestly returns `reasoning_applied: false` rather than lying.
-- **Cerebras** — free-tier RPM (30/min) is harsh and the upstream sometimes returns `queue_exceeded` ("We're experiencing high traffic right now") regardless of the gateway's pacing. Serial calls with sufficient spacing pass basic; parallel + tool tests are at the mercy of the upstream queue.
-- **Robust model-override handling** — when an explicit `model=` is set and the upstream returns 403/404 (model entitlement issue), V2 surfaces the error to the caller but does **not** put the whole provider into 600s backoff. This avoids the "one bad model name kills GitHub for ten minutes" footgun.
-
-Acceptance bar is `basic` and `tools` OK on at least 5/7. Met. See `/v1/capabilities` for the truth at runtime.
+The new provider will automatically appear in the dashboard. The failover order is controlled by `LLM_ORDER` in `.env`.
 
 ---
 
-## Files
+## How the Agent + MCP Flow Works
 
-- `main.py` — FastAPI app, routes, schema-validation + corrective retry
-- `providers.py` — adapters with `_translate_tools`, `_translate_messages`, `_apply_response_format`, `_apply_reasoning`
-- `cache.py` — Gemini SHA-256-keyed cache (TTL 5 min)
-- `router.py` — RateState + capability-aware `pick()`
-- `schemas.py` — Pydantic v2 request/response models incl. `ToolCall`, `ToolDef`, `CacheableSystemBlock`
-- `db.py` — SQLite log with tool/cache/reasoning columns
-- `client.py` — Python SDK with new kwargs
-- `static/dashboard.html` — capability badges, cache columns
-- `tests/test_all_providers.py` — per-provider matrix
-- `run.sh`, `requirements.txt`
+When you send a prompt to `/v1/agent`, here's what happens:
+
+```
+User: "multiply 4 times 2"
+  │
+  ▼
+┌─────────────────────────────┐
+│  /v1/agent endpoint         │
+│  1. Spawns MCP server       │
+│  2. Discovers 13 tools      │
+│  3. Sends prompt + tools    │
+│     to LLM provider         │
+└──────────┬──────────────────┘
+           │
+           ▼
+┌─────────────────────────────┐
+│  LLM Provider (mock/gemini) │
+│  Decides: call multiply     │
+│  with a=4, b=2              │
+└──────────┬──────────────────┘
+           │
+           ▼
+┌─────────────────────────────┐
+│  MCP Server (mcp_server.py) │
+│  Executes multiply(4, 2)    │
+│  Returns: {"result": 8.0}   │
+└──────────┬──────────────────┘
+           │
+           ▼
+┌─────────────────────────────┐
+│  LLM formats final answer   │
+│  "The result is 8.0."       │
+└─────────────────────────────┘
+```
+
+### Available MCP Tools
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `add` | Add two numbers | add(a=7, b=5) → 12 |
+| `subtract` | Subtract b from a | subtract(a=10, b=3) → 7 |
+| `multiply` | Multiply two numbers | multiply(a=4, b=2) → 8 |
+| `divide` | Divide a by b | divide(a=100, b=4) → 25 |
+| `power` | Raise base to exponent | power(base=2, exponent=10) → 1024 |
+| `sqrt` | Square root | sqrt(number=144) → 12 |
+| `save_note` | Save a note with title | save_note(title="todo", content="buy milk") |
+| `read_note` | Read a note by title | read_note(title="todo") |
+| `list_notes` | List all note titles | list_notes() |
+| `delete_note` | Delete a note | delete_note(title="todo") |
+| `get_current_time` | Current date/time | get_current_time() |
+| `string_length` | Count chars and words | string_length(text="hello world") |
+| `convert_temperature` | Convert C/F/K | convert_temperature(100, "C", "F") → 212 |
 
 ---
 
-## What V2 deliberately does NOT do
+## API Endpoints
 
-- **No new providers.** Same seven, same `.env` keys.
-- **No streaming changes** beyond emitting `tool_call_delta` SSE chunks alongside text deltas (same envelope).
-- **No tool execution.** V2 returns `tool_calls`; your agent dispatches and sends results back as `role: "tool"`.
-- **No agent loop.** The Plan→Act→Verify shape lives in `Session 5/agent5.py`, not here. The gateway is the substrate.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/agent` | POST | Agent endpoint with MCP tool loop |
+| `/v1/agent/tools` | GET | List available MCP tools |
+| `/v1/chat` | POST | Direct LLM chat (no tools) |
+| `/v1/status` | GET | Provider status, rate limits, usage |
+| `/v1/providers` | GET | List configured providers |
+| `/v1/capabilities` | GET | Per-provider capability matrix |
+| `/v1/calls` | GET | Recent call logs |
+| `/static/dashboard.html` | GET | Web dashboard |
+
+---
+
+## Project Structure
+
+```
+llm_gatewayV2/
+├── main.py              # FastAPI app, routes, agent loop
+├── providers.py         # LLM provider adapters (Gemini, GitHub, Mock, etc.)
+├── router.py            # Rate limiting + capability-aware failover
+├── mcp_server.py        # MCP tool server (calculator, notes, utilities)
+├── schemas.py           # Pydantic v2 request/response models
+├── cache.py             # Gemini prompt caching (SHA-256 keyed)
+├── db.py                # SQLite call logging
+├── client.py            # Python SDK
+├── run.sh               # Setup + start script
+├── requirements.txt     # Python dependencies
+├── .env.example         # Template for API keys
+├── static/
+│   ├── dashboard.html   # Web dashboard with testing UI
+│   └── help.html        # Provider setup guide
+└── tests/
+    └── test_all_providers.py  # Per-provider test matrix
+```
+
+---
+
+## Configuration
+
+All configuration is via environment variables in `../.env` (parent directory):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_ORDER` | `mock,ollama,gemini,...` | Failover order (comma-separated) |
+| `GATEWAY_V2_PORT` | `8100` | Server port |
+| `GEMINI_API_KEY` | — | Google AI Studio key |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model |
+| `GITHUB_ACCESS_TOKEN` | — | GitHub PAT |
+| `GITHUB_MODEL` | `openai/gpt-4.1-mini` | GitHub Models model |
+| `GROQ_API_KEY` | — | Groq key |
+| `NVIDIA_API_KEY` | — | NVIDIA NIM key |
+| `CEREBRAS_API_KEY` | — | Cerebras key |
+| `OPEN_ROUTER_API_KEY` | — | OpenRouter key |
+| `OLLAMA_MODEL` | — | Ollama model name |
+
+**No keys = mock provider only.** Add any key and the provider joins the failover chain automatically.
+
+---
+
+## License
+
+MIT

@@ -7,18 +7,20 @@
   :root {
     --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #c9d1d9;
     --muted: #8b949e; --green: #3fb950; --red: #f85149; --blue: #58a6ff;
-    --yellow: #d29922; --accent: #a371f7;
+    --yellow: #d29922; --accent: #a371f7; --cyan: #39d2c0;
   }
   * { box-sizing: border-box; }
   body { background: var(--bg); color: var(--text); font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 0; }
-  header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header nav a { color: var(--blue); margin-left: 16px; text-decoration: none; }
-  header nav a:hover { text-decoration: underline; }
-  main { padding: 20px; max-width: 1400px; margin: 0 auto; }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 24px 0 10px; font-weight: 600; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+  header .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 28px 0 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  h2 .icon { font-style: normal; font-size: 16px; }
+
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; transition: border-color 0.2s; }
+  .card:hover { border-color: var(--accent); }
   .card .name { font-weight: 600; font-size: 15px; }
   .card .model { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-all; }
   .bar { height: 6px; background: #21262d; border-radius: 3px; margin-top: 4px; overflow: hidden; }
@@ -27,73 +29,212 @@
   .bar > div.err { background: var(--red); }
   .row { display: flex; justify-content: space-between; font-size: 12px; margin-top: 10px; color: var(--muted); }
   .row b { color: var(--text); font-weight: 500; }
+
+  .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid var(--border); }
+  .tab { padding: 10px 20px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; padding-top: 16px; }
+  .tab-content.active { display: block; }
+
+  .test-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .test-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  select, input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+  select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--accent); border: none; color: white; padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  button:hover { background: #8b5cf6; }
+  button:active { transform: scale(0.98); }
+  textarea { width: 100%; min-height: 60px; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; font: 13px ui-monospace, SFMono-Regular, monospace; resize: vertical; }
+  #test-out { margin-top: 12px; padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; white-space: pre-wrap; font: 13px ui-monospace, SFMono-Regular, monospace; min-height: 50px; line-height: 1.5; }
+
+  .sample-prompts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .sample-btn { background: rgba(163,113,247,0.1); border: 1px solid rgba(163,113,247,0.3); color: var(--accent); padding: 5px 12px; border-radius: 14px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .sample-btn:hover { background: rgba(163,113,247,0.2); border-color: var(--accent); }
+
+  .guide-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .guide-section h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; color: var(--text); }
+  .guide-section p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 6px 0; }
+  .guide-section code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--cyan); }
+  .guide-section pre { background: var(--bg); padding: 12px; border-radius: 6px; font: 12px ui-monospace, SFMono-Regular, monospace; overflow-x: auto; color: var(--text); margin: 8px 0; line-height: 1.5; }
+  .tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 10px; }
+  .tool-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+  .tool-card .tname { font-weight: 600; font-size: 13px; color: var(--cyan); }
+  .tool-card .tdesc { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
   th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
   td.ok { color: var(--green); }
   td.err { color: var(--red); }
   td.prov { color: var(--blue); font-weight: 500; }
-  .controls { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-  select, input { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; font-size: 13px; }
-  button { background: var(--blue); border: none; color: white; padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; }
-  button:hover { background: #3a8cf2; }
+
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #21262d; color: var(--muted); }
-  .pill { padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+  .pill { padding: 2px 7px; border-radius: 3px; font-size: 11px; }
   .pill.ok { background: rgba(63,185,80,0.15); color: var(--green); }
   .pill.err { background: rgba(248,81,73,0.15); color: var(--red); }
   .pill.cap { background: rgba(88,166,255,0.15); color: var(--blue); margin-right: 4px; }
   .pill.capx { background: #21262d; color: var(--muted); margin-right: 4px; text-decoration: line-through; }
   .err-msg { color: var(--red); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .test-area { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
-  .test-area textarea { flex: 1; min-width: 300px; min-height: 70px; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 4px; font: 13px ui-monospace, monospace; }
-  #test-out { margin-top: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; font: 13px ui-monospace, monospace; min-height: 40px; }
-  .order-list { color: var(--accent); font-family: ui-monospace, monospace; font-size: 12px; }
+  .order-list { color: var(--accent); font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
   .caps-row { margin-top: 8px; }
   .stat { display: inline-block; margin-right: 14px; font-size: 11px; color: var(--muted); }
   .stat b { color: var(--text); }
+  .mode-toggle { display: flex; align-items: center; gap: 8px; }
+  .mode-toggle label { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 500; cursor: pointer; }
+  .mode-toggle input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .filter-row { display: flex; gap: 10px; align-items: center; }
 </style>
 </head>
 <body>
 <header>
-  <h1>⚡ LLM Gateway <span style="color:var(--accent)">V2</span> <span class="badge" id="port-badge"></span></h1>
-  <nav>
-    <a href="/">Dashboard</a>
-    <a href="/help">Help / Free Keys</a>
-    <a href="/v1/capabilities">API: capabilities</a>
-    <a href="/v1/providers">API: providers</a>
-    <a href="/v1/status">API: status</a>
-  </nav>
+  <div>
+    <h1>LLM Gateway <span style="color:var(--accent)">V2</span> <span class="badge" id="port-badge"></span></h1>
+    <div class="subtitle">Multi-provider LLM gateway with auto-failover, MCP agent tools, and intelligent routing</div>
+  </div>
 </header>
 <main>
-  <h2>Failover order</h2>
-  <div id="order" class="order-list">loading…</div>
 
-  <h2>Live providers <span style="float:right; font-size:11px; text-transform:none; letter-spacing:0; color:var(--muted)">cache+tool aware routing</span></h2>
+  <h2><i class="icon">&#9889;</i> Failover Order</h2>
+  <div id="order" class="order-list">loading...</div>
+
+  <h2><i class="icon">&#9881;</i> Live Providers</h2>
   <div id="providers" class="grid"></div>
 
-  <h2>Quick test (V2 features supported)</h2>
-  <div class="test-area">
-    <select id="test-prov"><option value="">auto (failover)</option></select>
-    <textarea id="test-prompt" placeholder="prompt…">Say hello in one short line.</textarea>
-    <button onclick="runTest()">Send</button>
-  </div>
-  <div id="test-out">—</div>
+  <div style="margin-top:28px;">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('test')">Try It</div>
+      <div class="tab" onclick="switchTab('guide')">How to Use</div>
+      <div class="tab" onclick="switchTab('tools')">MCP Tools</div>
+      <div class="tab" onclick="switchTab('logs')">Call Logs</div>
+    </div>
 
-  <h2>Recent calls
-    <span style="float:right; font-size:11px; text-transform:none; letter-spacing:0;">
-      <select id="filter-prov" onchange="loadCalls()"><option value="">all providers</option></select>
-      <select id="filter-status" onchange="loadCalls()">
-        <option value="">all</option><option value="ok">ok</option><option value="error">errors</option>
-      </select>
-    </span>
-  </h2>
-  <table id="calls-table">
-    <thead>
-      <tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th>
-      <th>In</th><th>Out</th><th>Cache (rd/wr)</th><th>Tools</th><th>Latency</th><th>Override</th><th>Error / Attempts</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <!-- TRY IT TAB -->
+    <div id="tab-test" class="tab-content active">
+      <div class="test-panel">
+        <div class="test-controls">
+          <select id="test-prov"><option value="">auto (failover)</option></select>
+          <div class="mode-toggle">
+            <label><input type="checkbox" id="agent-mode" checked> Agent + MCP Tools</label>
+          </div>
+          <button onclick="runTest()">Send</button>
+        </div>
+        <textarea id="test-prompt" placeholder="Type your prompt here...">multiply 4 times 2</textarea>
+        <div class="sample-prompts">
+          <span style="font-size:12px;color:var(--muted);margin-right:4px;">Try:</span>
+          <div class="sample-btn" onclick="fillPrompt('add 7 plus 5')">add 7 plus 5</div>
+          <div class="sample-btn" onclick="fillPrompt('multiply 12 times 8')">multiply 12 * 8</div>
+          <div class="sample-btn" onclick="fillPrompt('divide 100 by 4')">divide 100 / 4</div>
+          <div class="sample-btn" onclick="fillPrompt('what is the square root of 144')">sqrt(144)</div>
+          <div class="sample-btn" onclick="fillPrompt('what time is it now')">current time</div>
+          <div class="sample-btn" onclick="fillPrompt('subtract 50 minus 18')">50 - 18</div>
+          <div class="sample-btn" onclick="fillPrompt('convert 100 celsius to fahrenheit')">100C to F</div>
+          <div class="sample-btn" onclick="fillPrompt('3 raised to the power of 4')">3^4</div>
+        </div>
+        <div id="test-out">Click a sample prompt or type your own, then hit Send.</div>
+      </div>
+    </div>
+
+    <!-- HOW TO USE TAB -->
+    <div id="tab-guide" class="tab-content">
+      <div class="guide-section">
+        <h3>Quick Start (Zero Config)</h3>
+        <p>The gateway ships with a <strong>mock provider</strong> that works out of the box &mdash; no API keys needed.
+           Just select <code>mock</code> from the provider dropdown, check <strong>Agent + MCP Tools</strong>, and send a prompt.</p>
+        <p>The mock provider intelligently matches your prompt to the right MCP tool based on keywords like
+           <code>add</code>, <code>multiply</code>, <code>divide</code>, <code>sqrt</code>, <code>time</code>, etc.</p>
+      </div>
+
+      <div class="guide-section">
+        <h3>Two Modes of Operation</h3>
+        <p><strong>Chat mode</strong> (Agent unchecked) &mdash; sends your prompt to <code>/v1/chat</code>.
+           The LLM responds directly with text. No tools are used.</p>
+        <p><strong>Agent mode</strong> (Agent checked) &mdash; sends your prompt to <code>/v1/agent</code>.
+           The gateway spawns an MCP server, discovers tools, and runs an agentic loop:</p>
+        <pre>User Prompt &#8594; LLM decides which tool to call
+&#8594; MCP Server executes the tool
+&#8594; Result sent back to LLM
+&#8594; LLM formats the final answer</pre>
+      </div>
+
+      <div class="guide-section">
+        <h3>Sample Prompts for Agent + MCP Mode</h3>
+        <p>Use the <code>mock</code> provider to test these without any API keys:</p>
+        <pre>Math:       "add 7 plus 5"  |  "multiply 12 times 8"  |  "divide 100 by 4"
+            "subtract 50 minus 18"  |  "3 raised to the power of 4"
+            "what is the square root of 144"
+
+Utility:    "what time is it now"
+            "convert 100 celsius to fahrenheit"
+
+Notes:      "save a note titled groceries with content buy milk and eggs"
+            "list all notes"</pre>
+      </div>
+
+      <div class="guide-section">
+        <h3>Using with cURL</h3>
+        <pre># Agent mode (with MCP tools)
+curl -X POST http://localhost:<span class="port-val">8100</span>/v1/agent \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "multiply 4 times 2", "provider": "mock"}'
+
+# Chat mode (plain LLM)
+curl -X POST http://localhost:<span class="port-val">8100</span>/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Say hello", "provider": "mock"}'</pre>
+      </div>
+
+      <div class="guide-section">
+        <h3>Connect a Real LLM Provider</h3>
+        <p>To use a real LLM instead of mock, create a <code>.env</code> file in the <strong>parent directory</strong>
+           (one level above <code>llm_gatewayV2/</code>). Copy from <code>.env.example</code> and fill in your key:</p>
+        <pre># For Google Gemini (free tier available):
+# 1. Go to aistudio.google.com &rarr; Get API Key
+# 2. Add to your .env file:
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-2.5-flash
+
+# For GitHub Models (free tier available):
+# 1. Go to github.com/marketplace/models
+# 2. Pick a model &rarr; click "Use this model"
+# 3. Create a Personal Access Token at github.com/settings/tokens
+# 4. Add to your .env file:
+GITHUB_ACCESS_TOKEN=your_pat_here
+GITHUB_MODEL=openai/gpt-4.1-mini</pre>
+        <p>Restart the gateway after updating <code>.env</code>. The new provider will appear in the dashboard automatically.</p>
+      </div>
+    </div>
+
+    <!-- MCP TOOLS TAB -->
+    <div id="tab-tools" class="tab-content">
+      <div class="guide-section">
+        <h3>Available MCP Tools</h3>
+        <p>These tools are served by <code>mcp_server.py</code> and available via the <code>/v1/agent</code> endpoint.
+           The LLM decides which tool to call based on your prompt.</p>
+        <div id="tools-grid" class="tool-grid">
+          <div style="color:var(--muted)">Loading tools...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALL LOGS TAB -->
+    <div id="tab-logs" class="tab-content">
+      <div class="filter-row" style="margin-bottom:12px;">
+        <select id="filter-prov" onchange="loadCalls()"><option value="">all providers</option></select>
+        <select id="filter-status" onchange="loadCalls()">
+          <option value="">all</option><option value="ok">ok</option><option value="error">errors</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="calls-table">
+          <thead>
+            <tr><th>Time</th><th>Provider</th><th>Model</th><th>Status</th>
+            <th>In</th><th>Out</th><th>Cache (rd/wr)</th><th>Tools</th><th>Latency</th><th>Override</th><th>Error / Attempts</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -116,15 +257,44 @@ function capPills(caps) {
   return items.map(([k,label]) => `<span class="pill ${caps[k] ? 'cap' : 'capx'}">${label}</span>`).join('');
 }
 
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'tools') loadTools();
+  if (name === 'logs') loadCalls();
+}
+
+function fillPrompt(text) {
+  document.getElementById('test-prompt').value = text;
+  document.getElementById('agent-mode').checked = true;
+}
+
 let CAPS = {};
 
 async function loadCaps() {
   CAPS = await fetch('/v1/capabilities').then(r => r.json());
 }
 
+async function loadTools() {
+  try {
+    const tools = await fetch('/v1/agent/tools').then(r => r.json());
+    const grid = document.getElementById('tools-grid');
+    grid.innerHTML = tools.map(t => `
+      <div class="tool-card">
+        <div class="tname">${t.name}</div>
+        <div class="tdesc">${(t.description || '').split('\n')[0]}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('tools-grid').innerHTML = '<div style="color:var(--red)">Failed to load tools</div>';
+  }
+}
+
 async function refresh() {
   const r = await fetch('/v1/status').then(r => r.json());
-  document.getElementById('order').textContent = r.order.join(' → ');
+  document.getElementById('order').textContent = r.order.join('  \u2192  ');
 
   const grid = document.getElementById('providers');
   const provSelect = document.getElementById('test-prov');
@@ -210,26 +380,49 @@ async function loadCalls() {
 async function runTest() {
   const prompt = document.getElementById('test-prompt').value;
   const provider = document.getElementById('test-prov').value || null;
+  const agentMode = document.getElementById('agent-mode').checked;
   const out = document.getElementById('test-out');
-  out.textContent = '⏳ sending…';
+  out.textContent = '\u23F3 sending...';
   try {
-    const r = await fetch('/v1/chat', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({prompt, provider, max_tokens: 200})
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      out.textContent = '❌ ' + (d.detail || JSON.stringify(d));
+    if (agentMode) {
+      const body = {prompt};
+      if (provider) body.provider = provider;
+      const r = await fetch('/v1/agent', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        out.textContent = '\u274C ' + (d.detail || JSON.stringify(d));
+      } else {
+        let trace = '';
+        if (d.tool_trace && d.tool_trace.length) {
+          trace = '\n\n\u2500\u2500 Tool Trace \u2500\u2500\n' + d.tool_trace.map((t, i) =>
+            `  Step ${i+1}: ${t.tool}(${JSON.stringify(t.arguments)})\n         \u2192 ${t.result}`
+          ).join('\n');
+        }
+        out.textContent = `[Agent \u00B7 ${d.provider} \u00B7 ${d.model} \u00B7 ${d.iterations} iteration(s) \u00B7 in=${d.total_input_tokens} out=${d.total_output_tokens} \u00B7 ${d.total_latency_ms}ms]\n\n\u2705 ${d.final_text}${trace}`;
+      }
     } else {
-      out.textContent = `[${d.provider} · ${d.model} · ${d.latency_ms}ms · in=${d.input_tokens} out=${d.output_tokens} · cache_read=${d.cache_read_input_tokens||0} · dialect=${d.tool_call_dialect}]\n\n${d.text}`;
+      const r = await fetch('/v1/chat', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt, provider, max_tokens: 200})
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        out.textContent = '\u274C ' + (d.detail || JSON.stringify(d));
+      } else {
+        out.textContent = `[${d.provider} \u00B7 ${d.model} \u00B7 ${d.latency_ms}ms \u00B7 in=${d.input_tokens} out=${d.output_tokens} \u00B7 cache_read=${d.cache_read_input_tokens||0} \u00B7 dialect=${d.tool_call_dialect}]\n\n${d.text}`;
+      }
     }
   } catch (e) {
-    out.textContent = '❌ ' + e.message;
+    out.textContent = '\u274C ' + e.message;
   }
   refresh(); loadCalls();
 }
 
 document.getElementById('port-badge').textContent = 'port ' + location.port;
+document.querySelectorAll('.port-val').forEach(el => el.textContent = location.port);
 loadCaps().then(() => { refresh(); loadCalls(); });
 setInterval(() => { refresh(); loadCalls(); }, 5000);
 </script>
