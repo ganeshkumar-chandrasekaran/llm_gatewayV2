@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from jsonschema import Draft202012Validator, ValidationError
 
 ROOT = Path(__file__).parent
+load_dotenv(ROOT / ".env")
 load_dotenv(ROOT.parent / ".env")
 
 import db
@@ -20,7 +21,7 @@ from schemas import ChatRequest, ChatResponse, ToolCall
 
 DEFAULT_ORDER = ["mock", "ollama", "gemini", "nvidia", "groq", "cerebras", "openrouter", "github"]
 ORDER = [x.strip() for x in os.getenv("LLM_ORDER", ",".join(DEFAULT_ORDER)).split(",") if x.strip()]
-PORT = int(os.getenv("GATEWAY_V2_PORT", "8100"))
+PORT = int(os.getenv("PORT", os.getenv("GATEWAY_V2_PORT", "8100")))
 
 
 @asynccontextmanager
